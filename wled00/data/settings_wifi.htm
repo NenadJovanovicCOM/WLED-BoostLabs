@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+	<title>WiFi Settings</title>
+	<script>
+		var d = document;
+		var loc = false, locip, locproto = "http:";
+		var scanLoops = 0, preScanSSID = "";
+
+		function gId(e) { return d.getElementById(e); }
+		function cE(e) { return d.createElement(e); }
+		function H(){window.open("https://kno.wled.ge/features/settings/#wifi-settings");}
+		function B(){window.open(getURL("/settings"),"_self");}
+		function N() {
+			const button = gId("scan");
+			button.disabled = true;
+			button.textContent = "Scanning...";
+
+			fetch(getURL("/json/net")).then((response) => {
+				return response.json();
+			}).then((json) => {
+				// Get the list of networks only, defaulting to an empty array.
+				return Object.assign(
+					{},
+					{"networks": []},
+					json,
+				).networks.sort(
+					// Sort by signal strength, descending.
+					(a, b) => b.rssi - a.rssi
+				).reduce(
+					// Filter out duplicate SSIDs. Since it is sorted by signal
+					// strength, the strongest signal will be kept in the
+					// order it as originally appeared in the array.
+					(unique, other) => {
+						if(!unique.some(obj => obj.ssid === other.ssid)) {
+							unique.push(other);
+						}
+						return unique;
+					},
+					[],
+				);
+			}).then((networks) => {
+				// If there are no networks, fetch it again in a second.
+				// but only do this a few times.
+				if (networks.length === 0 && scanLoops < 10) {
+					scanLoops++;
+					setTimeout(N, 1000);
+					return;
+				}
+				scanLoops = 0;
+
+				let cs = gId("CS");
+				if (cs) {
+					let select = cE("select");
+					select.setAttribute("id", "CS");
+					select.setAttribute("name", "CS");
+					select.setAttribute("onchange", "T()");
+					preScanSSID = cs.value;
+
+					for (let i = 0; i < select.children.length; i++) {
+						select.removeChild(select.children[i]);
+					}
+
+					for (let i = 0; i < networks.length; i++) {
+						const option = cE("option");
+
+						option.setAttribute("value", networks[i].ssid);
+						option.textContent = `${networks[i].ssid} (${networks[i].rssi} dBm)`;
+
+						if (networks[i].ssid === cs.value) {
+							option.setAttribute("selected", "selected");
+						}
+
+						select.appendChild(option);
+					}
+					const option = cE("option");
+
+					option.setAttribute("value", "!Cs");
+					option.textContent = `Other network...`;
+					select.appendChild(option);
+
+					cs.replaceWith(select);
+				}
+
+				button.disabled = false;
+				button.textContent = "Scan";
+			});
+		}
+		// replace WiFi select with custom SSID input field again
+		function T() {
+			let cs = gId("CS");
+			if (!cs || cs.value != "!Cs") return;
+			let input = cE("input");
+			input.type = "text";
+			input.id = "CS";
+			input.name ="CS";
+			input.setAttribute("maxlength",32);
+			input.value = preScanSSID;
+			cs.replaceWith(input);
+		}
+		// https://www.educative.io/edpresso/how-to-dynamically-load-a-js-file-in-javascript
+		function loadJS(FILE_URL, async = true) {
+			let scE = cE("script");
+			scE.setAttribute("src", FILE_URL);
+			scE.setAttribute("type", "text/javascript");
+			scE.setAttribute("async", async);
+			d.body.appendChild(scE);
+			// success event
+			scE.addEventListener("load", () => {
+				//console.log("File loaded");
+				GetV();
+			});
+			// error event
+			scE.addEventListener("error", (ev) => {
+				console.log("Error on loading file", ev);
+				alert("Loading of configuration script failed.\nIncomplete page data!");
+			});
+		}
+		function S() {
+			let l = window.location;
+			if (l.protocol == "file:") {
+				loc = true;
+				locip = localStorage.getItem('locIp');
+				if (!locip) {
+					locip = prompt("File Mode. Please enter WLED IP!");
+					localStorage.setItem('locIp', locip);
+				}
+			} else {
+				// detect reverse proxy
+				let path = l.pathname;
+				let paths = path.slice(1,path.endsWith('/')?-1:undefined).split("/");
+				if (paths.length > 2) {
+					locproto = l.protocol;
+					loc = true;
+					locip = l.hostname + (l.port ? ":" + l.port : "") + "/" + paths[0];
+				}
+			}
+			loadJS(getURL('/settings/s.js?p=1'), false);	// If we set async false, file is loaded and executed, then next statement is processed
+			if (loc) d.Sf.action = getURL('/settings/wifi');
+		}
+		function getURL(path) {
+			return (loc ? locproto + "//" + locip : "") + path;
+		}
+		
+		// BoostLabs custom functions
+		function toggleSection(id) {
+			const content = document.getElementById(id);
+			const icon = document.querySelector(`[data-target="${id}"] .toggle-icon`);
+			
+			if (content.classList.contains('show')) {
+				content.classList.remove('show');
+				icon.classList.remove('rotate');
+			} else {
+				content.classList.add('show');
+				icon.classList.add('rotate');
+			}
+		}
+		
+		// Initialize collapsible sections after page load
+		function initCollapsibleSections() {
+			// Add click event listeners to section headers
+			const headers = document.querySelectorAll('.section-header');
+			headers.forEach(header => {
+				const targetId = header.getAttribute('data-target');
+				header.addEventListener('click', () => toggleSection(targetId));
+			});
+		}
+		
+		// Add initialization to the onload function
+		const originalOnload = window.onload;
+		window.onload = function() {
+			if (originalOnload) originalOnload();
+			
+			// Initialize after a short delay to ensure DOM is fully loaded
+			setTimeout(() => {
+				initCollapsibleSections();
+			}, 500);
+		};
+	</script>
+	<style>
+		@import url("style.css");
+		
+		/* BoostLabs custom styles */
+		.tooltip {
+			position: relative;
+			display: inline-block;
+			cursor: help;
+			margin-left: 5px;
+		}
+		
+		.tooltip i {
+			color: #28f;
+			font-size: 18px;
+		}
+		
+		.tooltip .tooltiptext {
+			visibility: hidden;
+			width: 250px;
+			background-color: #333;
+			color: #fff;
+			text-align: center;
+			border-radius: 6px;
+			padding: 8px;
+			position: absolute;
+			z-index: 1;
+			bottom: 125%;
+			left: 50%;
+			margin-left: -125px;
+			opacity: 0;
+			transition: opacity 0.3s;
+			font-size: 14px;
+			line-height: 1.4;
+			border: 1px solid #555;
+		}
+		
+		.tooltip:hover .tooltiptext {
+			visibility: visible;
+			opacity: 1;
+		}
+		
+		.section-header {
+			background-color: #333;
+			padding: 8px;
+			border-radius: 8px;
+			margin-top: 15px;
+			cursor: pointer;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+		
+		.section-header h3 {
+			margin: 0;
+			display: inline-block;
+		}
+		
+		.section-content {
+			padding: 0 10px;
+			overflow: hidden;
+			max-height: 0;
+			transition: max-height 0.3s ease-out;
+		}
+		
+		.section-content.show {
+			max-height: 1000px;
+			transition: max-height 0.5s ease-in;
+		}
+		
+		.toggle-icon {
+			font-size: 20px;
+			transition: transform 0.3s;
+		}
+		
+		.toggle-icon.rotate {
+			transform: rotate(180deg);
+		}
+		
+		.warning {
+			color: #f55;
+			font-size: 14px;
+			margin: 5px 0;
+			padding: 5px;
+			background-color: rgba(255, 85, 85, 0.1);
+			border-radius: 5px;
+			line-height: 1.3;
+		}
+		
+		.step {
+			background-color: #28f;
+			color: white;
+			border-radius: 50%;
+			width: 24px;
+			height: 24px;
+			display: inline-block;
+			text-align: center;
+			line-height: 24px;
+			margin-right: 8px;
+			font-weight: bold;
+		}
+		
+		.input-label {
+			font-weight: bold;
+			color: #28f;
+			margin-top: 10px;
+			display: block;
+		}
+		
+		.input-description {
+			font-size: 14px;
+			color: #aaa;
+			margin-bottom: 5px;
+		}
+		
+		.input-group {
+			margin-bottom: 15px;
+		}
+	</style>
+</head>
+<body onload="S()">
+	<form id="form_s" name="Sf" method="post">
+		<div class="toprow">
+		<div class="helpB"><button type="button" onclick="H()">?</button></div>
+		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button><hr>
+		</div>
+		<h2>BoostLabs WiFi Setup</h2>
+		
+		<!-- Step 1: Connect to Phone Hotspot -->
+		<div class="input-group">
+			<h3><span class="step">1</span>Connect to your phone's hotspot network</h3>
+			<p>For best results, enable your phone's hotspot and connect this device to it.</p>
+			
+			<button type="button" id="scan" onclick="N()">Scan for Networks</button><br>
+			
+			<div class="input-label">
+				Phone Hotspot Name (SSID)
+				<div class="tooltip"><i>?</i>
+					<span class="tooltiptext">Enter the name of your phone's hotspot network. You can find this in your phone's hotspot settings.</span>
+				</div>
+			</div>
+			<div class="input-description">This should match the name of your phone's hotspot</div>
+			<input type="text" id="CS" name="CS" maxlength="32"><br>
+			
+			<div class="input-label">
+				Phone Hotspot Password
+				<div class="tooltip"><i>?</i>
+					<span class="tooltiptext">Enter the password for your phone's hotspot. This is the password you set up in your phone's hotspot settings.</span>
+				</div>
+			</div>
+			<div class="input-description">The password you set for your phone's hotspot</div>
+			<input type="password" name="CP" maxlength="63"><br>
+			
+			<div class="input-description">Client IP: <span class="sip"> Not connected </span></div>
+		</div>
+		
+		<!-- Advanced Network Settings (Collapsible) -->
+		<div class="section-header" data-target="advancedNetworkSettings">
+			<h3><span class="step">2</span>Advanced Network Settings</h3>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div id="advancedNetworkSettings" class="section-content">
+			<div class="warning">
+				⚠️ These are advanced settings. Most users should leave these at their default values. Only modify if you know what you're doing.
+			</div>
+			
+			<div class="input-label">Static IP (leave at 0.0.0.0 for DHCP)</div>
+			<input name="I0" type="number" class="s" min="0" max="255" required> .
+			<input name="I1" type="number" class="s" min="0" max="255" required> .
+			<input name="I2" type="number" class="s" min="0" max="255" required> .
+			<input name="I3" type="number" class="s" min="0" max="255" required><br>
+			
+			<div class="input-label">Static gateway</div>
+			<input name="G0" type="number" class="s" min="0" max="255" required> .
+			<input name="G1" type="number" class="s" min="0" max="255" required> .
+			<input name="G2" type="number" class="s" min="0" max="255" required> .
+			<input name="G3" type="number" class="s" min="0" max="255" required><br>
+			
+			<div class="input-label">Static subnet mask</div>
+			<input name="S0" type="number" class="s" min="0" max="255" required> .
+			<input name="S1" type="number" class="s" min="0" max="255" required> .
+			<input name="S2" type="number" class="s" min="0" max="255" required> .
+			<input name="S3" type="number" class="s" min="0" max="255" required><br>
+			
+			<div class="input-label">mDNS address (leave empty for no mDNS)</div>
+			http:// <input type="text" name="CM" maxlength="32"> .local<br>
+		</div>
+		
+		<!-- Failover Access Point Settings (Collapsible) -->
+		<div class="section-header" data-target="failoverSettings">
+			<h3><span class="step">3</span>Failover Access Point Settings</h3>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div id="failoverSettings" class="section-content">
+			<p>The access point is a backup connection method if the primary WiFi connection fails.</p>
+			
+			<div class="input-label">
+				AP SSID (leave empty for no AP)
+				<div class="tooltip"><i>?</i>
+					<span class="tooltiptext">This is the name of the fallback WiFi network that this device will create if it can't connect to your phone's hotspot.</span>
+				</div>
+			</div>
+			<input type="text" name="AS" maxlength="32"><br>
+			
+			<div class="input-label">Hide AP name</div>
+			<input type="checkbox" name="AH"><br>
+			
+			<div class="input-label">AP password (leave empty for open)</div>
+			<input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
+			
+			<div class="input-label">Access Point WiFi channel</div>
+			<input name="AC" type="number" class="xs" min="1" max="13" required><br>
+			
+			<div class="input-label">AP opens</div>
+			<select name="AB">
+				<option value="0">No connection after boot</option>
+				<option value="1">Disconnected</option>
+				<option value="2">Always</option>
+				<option value="3">Never (not recommended)</option>
+			</select><br>
+			
+			<div class="input-description">AP IP: <span class="sip"> Not active </span></div>
+		</div>
+		
+		<!-- Experimental Settings (Collapsible) -->
+		<div class="section-header" data-target="experimentalSettings">
+			<h3>Experimental Settings</h3>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div id="experimentalSettings" class="section-content">
+			<div class="warning">
+				⚠️ These experimental settings may affect stability. Only enable if you're experiencing specific issues.
+			</div>
+			
+			<div class="input-label">Force 802.11g mode (ESP8266 only)</div>
+			<input type="checkbox" name="FG"><br>
+			
+			<div class="input-label">Disable WiFi sleep</div>
+			<input type="checkbox" name="WS"><br>
+			<i>Can help with connectivity issues.<br>
+			Do not enable if WiFi is working correctly, increases power consumption.</i>
+		</div>
+
+		<!-- Wireless Remote (Collapsible) -->
+		<div class="section-header" data-target="remoteSettings">
+			<h3>Wireless Remote</h3>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div id="remoteSettings" class="section-content" id="remd">
+			<div class="warning">
+				⚠️ Only enable if you're using a wireless remote with this device.
+			</div>
+			
+			<i>Listen for events over ESP-NOW<br>
+			Keep disabled if not using a remote, increases power consumption.<br></i>
+			
+			<div class="input-label">Enable Remote</div>
+			<input type="checkbox" name="RE"><br>
+			
+			<div class="input-label">Hardware MAC</div>
+			<input type="text" name="RMAC"><br>
+			
+			<div class="input-description">Last Seen: <span class="rlid">None</span></div>
+		</div>
+		
+		<!-- Ethernet Settings (Collapsible) -->
+		<div class="section-header" data-target="ethernetSettings">
+			<h3>Ethernet Settings</h3>
+			<span class="toggle-icon">▼</span>
+		</div>
+		<div id="ethernetSettings" class="section-content" id="ethd">
+			<div class="warning">
+				⚠️ Only configure if you're using an Ethernet connection.
+			</div>
+			
+			<div class="input-label">Ethernet Type</div>
+			<select name="ETH">
+				<option value="0">None</option>
+				<option value="9">ABC! WLED V43 & compatible</option>
+				<option value="2">ESP32-POE</option>
+				<option value="6">ESP32Deux</option>
+				<option value="7">KIT-VE</option>
+				<option value="8">QuinLED-Dig-Octa & T-ETH-POE</option>
+				<option value="4">QuinLED-ESP32</option>
+				<option value="10">Serg74-ETH32</option>
+				<option value="5">TwilightLord-ESP32</option>
+				<option value="3">WESP32</option>
+				<option value="1">WT32-ETH01</option>
+			</select>
+		</div>
+		<hr>
+		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button>
+	</form>
+</body>
+</html>
